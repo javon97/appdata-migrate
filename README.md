@@ -15,7 +15,7 @@ Windows C 盘瘦身工具：把 `AppData` 下的大目录迁到其它盘，在�
 ## 安装
 
 ```bash
-git clone https://github.com/fainshare/appdata-migrate.git
+git clone https://github.com/javon97/appdata-migrate.git
 cp -r appdata-migrate ~/.claude/skills/appdata-migrate
 ```
 
