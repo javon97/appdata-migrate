@@ -43,11 +43,20 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/migrate-folder.ps1 `
 先关闭对应程序，再执行：
 
 ```powershell
+# 默认目标盘 D
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/migrate-folder.ps1 `
   -Path "C:\Users\<user>\AppData\Local\SomeApp"
+
+# 指定其它盘（等价于 -TargetRoot "E:\AppDataMoved"）
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/migrate-folder.ps1 `
+  -Path "C:\Users\<user>\AppData\Local\SomeApp" -TargetDrive E
+
+# 指定任意目录
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/migrate-folder.ps1 `
+  -Path "C:\Users\<user>\AppData\Local\SomeApp" -TargetRoot "E:\Caches"
 ```
 
-默认目标为 `D:\AppDataMoved\<路径>`，可用 `-TargetRoot` 修改。脚本会移动目录、在原路径建 Junction 并校验。
+不指定目标时默认 `D:\AppDataMoved\<路径>`；D 盘不存在会报错并列出可用盘符。目标不能是 C 盘，脚本会校验剩余空间 ≥ 待搬体积 ×1.05（`-Force` 可跳过）。
 
 ### 4. 回滚
 

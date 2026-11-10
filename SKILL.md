@@ -10,6 +10,7 @@ description: Windows C 盘 AppData 瘦身：只读扫描占用、把大目录迁
 ## 边界
 
 - 只处理当前用户 `AppData` 下的目录，不碰 `C:\Windows`、`Program Files`、系统还原。
+- 目标盘不能是 C 盘，默认 D 盘，可用 `-TargetDrive` / `-TargetRoot` 选择其它盘或目录。
 - 不删除用户文件：搬迁 = 移动 + 建联接；回滚 = 删联接 + 把数据移回。
 - 动手前必须让用户确认范围（列出目录清单和体积），并关闭对应程序。
 - 搬迁后软件卸载重装、手动改动目标盘目录都可能让联接失效，需要复查。
@@ -47,7 +48,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/migrate-folder.ps1 -
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/migrate-folder.ps1 -Path "C:\Users\<user>\AppData\Local\X"
 ```
 
-默认目标 `D:\AppDataMoved\<相对路径>`，可用 `-TargetRoot` 改。脚本流程：校验路径在 AppData 内 → 计算体积 → `Move-Item` → `New-Item -ItemType Junction` → 校验 `LinkType` → 汇报释放空间。
+默认目标 `D:\AppDataMoved\<相对路径>`；换盘用 `-TargetDrive E`（等价 `-TargetRoot "E:\AppDataMoved"`），也可用 `-TargetRoot` 指定任意目录。不指定且 D 盘不存在时会报错并列出可用盘符。
+
+脚本会拒绝把目标放在 C 盘，并校验目标盘剩余空间 ≥ 待搬体积 ×1.05（确认要试可加 `-Force`）。流程：校验路径在 AppData 内 → 计算体积 → `Move-Item` → `New-Item -ItemType Junction` → 校验 `LinkType` → 汇报释放空间。
 
 批量搬迁时逐个目录调用、每个单独 try/catch，一个失败不影响其它。
 

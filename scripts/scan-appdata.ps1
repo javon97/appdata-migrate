@@ -76,10 +76,13 @@ foreach ($root in $roots) {
     }
 }
 
-$cDrive = Get-PSDrive -Name C -ErrorAction SilentlyContinue
-$dDrive = Get-PSDrive -Name D -ErrorAction SilentlyContinue
-$freeLine = 'C 盘可用: ' + (Format-Size ([long]$cDrive.Free))
-if ($dDrive) { $freeLine += '   D 盘可用: ' + (Format-Size ([long]$dDrive.Free)) }
+$driveParts = @()
+foreach ($drive in [System.IO.DriveInfo]::GetDrives()) {
+    if ($drive.DriveType -eq 'Fixed' -and $drive.IsReady) {
+        $driveParts += ($drive.Name.Substring(0, 2) + ' 可用 ' + (Format-Size ([long]$drive.AvailableFreeSpace)))
+    }
+}
+$freeLine = '磁盘: ' + ($driveParts -join '   ')
 
 $lines = New-Object System.Collections.Generic.List[string]
 $lines.Add('AppData 占用扫描  ' + (Get-Date -Format 'yyyy-MM-dd HH:mm'))

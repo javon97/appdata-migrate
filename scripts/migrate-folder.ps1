@@ -7,8 +7,12 @@
   只允许操作 %USERPROFILE%\AppData 下的目录。
 .PARAMETER Path
   源目录（搬迁）或联接路径（回滚），必须在 AppData 下。
+.PARAMETER TargetDrive
+  目标盘符，如 E: 或 E，等价于 -TargetRoot "E:\AppDataMoved"。
 .PARAMETER TargetRoot
-  目标根目录，默认 D:\AppDataMoved。
+  目标根目录。不指定 TargetDrive 时使用；留空则默认 D:\AppDataMoved（D 盘不存在会报错并列出可用盘）。
+.PARAMETER Force
+  跳过目标盘剩余空间检查（默认要求可用空间 >= 待搬体积 ×1.05）。
 .PARAMETER WhatIf
   只打印计划，不做任何修改。
 .PARAMETER Rollback
@@ -16,13 +20,17 @@
 .EXAMPLE
   migrate-folder.ps1 -Path "C:\Users\Administrator\AppData\Local\Foo" -WhatIf
 .EXAMPLE
-  migrate-folder.ps1 -Path "C:\Users\Administrator\AppData\Local\Foo"
+  migrate-folder.ps1 -Path "C:\Users\Administrator\AppData\Local\Foo" -TargetDrive E
+.EXAMPLE
+  migrate-folder.ps1 -Path "C:\Users\Administrator\AppData\Local\Foo" -TargetRoot "E:\Caches"
 .EXAMPLE
   migrate-folder.ps1 -Path "C:\Users\Administrator\AppData\Local\Foo" -Rollback
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Path,
-    [string]$TargetRoot = 'D:\AppDataMoved',
+    [string]$TargetDrive = '',
+    [string]$TargetRoot = '',
+    [switch]$Force,
     [switch]$WhatIf,
     [switch]$Rollback
 )
@@ -59,6 +67,12 @@ function Format-Size {
     return ('{0:N0} MB' -f ($Bytes / 1MB))
 }
 
+function Get-FixedDriveNames {
+    return @([System.IO.DriveInfo]::GetDrives() |
+        Where-Object { $_.DriveType -eq 'Fixed' -and $_.IsReady } |
+        ForEach-Object { $_.Name.Substring(0, 2) })
+}
+
 $appDataRoot = [System.IO.Path]::GetFullPath((Join-Path $env:USERPROFILE 'AppData'))
 $full = [System.IO.Path]::GetFullPath($Path)
 
@@ -87,10 +101,42 @@ if ($Rollback) {
 if ($isLink) { throw "$full 已经是目录联接，无需搬迁。" }
 if (-not $item.PSIsContainer) { throw "$full 不是目录。" }
 
+$size = Get-DirSize -Folder $full
+
+if ($TargetDrive) {
+    $letter = $TargetDrive.Trim().TrimEnd('\').TrimEnd(':').ToUpper()
+    if ($letter -notmatch '^[A-Z]$') { throw "盘符格式不对：$TargetDrive（示例：E: 或 E）" }
+    $driveRoot = $letter + ':\'
+    if (-not (Test-Path -LiteralPath $driveRoot)) {
+        throw ('磁盘不存在：' + $driveRoot + '。可用盘符：' + ((Get-FixedDriveNames) -join ' '))
+    }
+    $TargetRoot = $driveRoot + 'AppDataMoved'
+}
+
+if (-not $TargetRoot) {
+    if (Test-Path -LiteralPath 'D:\') {
+        $TargetRoot = 'D:\AppDataMoved'
+    } else {
+        throw ('未指定目标盘，且默认 D 盘不存在。请用 -TargetDrive 指定，可用盘符：' + ((Get-FixedDriveNames) -join ' '))
+    }
+}
+
+$TargetRoot = [System.IO.Path]::GetFullPath($TargetRoot)
+$targetRootDrive = [System.IO.Path]::GetPathRoot($TargetRoot)
+if ($targetRootDrive -match '^([A-Za-z]):\\$') {
+    $targetLetter = $Matches[1].ToUpper()
+    if ($targetLetter -eq 'C') { throw '拒绝把目标放在 C 盘。' }
+    $driveInfo = New-Object System.IO.DriveInfo($targetLetter)
+    if (-not $driveInfo.IsReady) { throw ('目标盘不可用：' + $targetLetter + ':') }
+    $required = [long]($size * 1.05)
+    if ($driveInfo.AvailableFreeSpace -lt $required -and -not $Force) {
+        throw ('目标盘剩余空间不足：需要 ' + (Format-Size $required) + '，可用 ' + (Format-Size ([long]$driveInfo.AvailableFreeSpace)) + '。确认要试可加 -Force。')
+    }
+}
+
 $relative = $full.Substring($appDataRoot.Length).TrimStart('\')
 $leaf = ($relative -replace '[\\/:*?"<>|]', '_')
 $targetPath = Join-Path $TargetRoot $leaf
-$size = Get-DirSize -Folder $full
 
 Write-Host ('源目录: ' + $full)
 Write-Host ('体积:   ' + (Format-Size $size))
